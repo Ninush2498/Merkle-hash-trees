@@ -59,7 +59,7 @@ def merkle_tree(n, prefix1, prefix2):
     f.close()
 
     f = open('tree.txt', 'w')
-    public_info = f"MerkleTree:sha1:{prefix1.hex()}:{prefix2.hex()}:{n}:{i}:{tree[0][-1]}"  # public info of the hash tree
+    public_info = f"MerkleTree:sha1:{prefix1.hex()}:{prefix2.hex()}:{n}:{i}:{tree[0][2]}"  # public info of the hash tree ##TO MAKE IT CONSISTENT WITH THE REST OF THE CODE
     f.write(public_info)
 
     f.write(temp)
@@ -77,29 +77,29 @@ def update_tree(new_doc, prefix1, prefix2):
     #depth = int(header[5])
 
     new_leaf = (f"{0}", f"{n}", hash_file(new_doc, prefix1))
-    tree = [tuple(map(str, line.strip().split(':'))) for line in lines[1:]]
+    tree = [tuple(map(str, line.strip().split(':'))) for line in lines[1:]] ##WHY THE MAP WITH STR?
     tree.append(new_leaf)
 
-    depth = math.ceil(int(new_leaf[1])+1/2)
+    depth = math.ceil(math.log(n+1, 2)) ##LOGARITHMIC HEIGHT
     #print(tree)
-    tmp_dict = dict((f"{x}{y}", h) for x, y , h in tree)
+    tmp_dict = dict((f"{x}{y}", h) for x, y, h in tree)
 
-    for i in range(depth - 1):
+    for i in range(depth):
         # check if node is odd or even, to determine how you get the hash (previous one or next/empty one).
 
         if n % 2==0: #using the next one
             try:
-                hash = tmp_dict[f"{i}{n+1}"]
+                hash = tmp_dict[f"{i}{n+1}"] ##THIS NEVER EXISTS, DOES IT?
             except:
                 hash = ""
             parent = (f"{i + 1}", f"{n // 2}",hashlib.sha1(prefix2 + bytes.fromhex(tmp_dict[f"{i}{n}"]) + bytes.fromhex(hash)).hexdigest())
         else: # using the previous one
             try:
-                hash = tmp_dict[f"{i}{n-1}"]
+                hash = tmp_dict[f"{i}{n-1}"] ##THIS SHOULD ALWAYS EXIST, OR NOT?
             except:
                 hash = ""
-            parent = (f"{i + 1}", f"{n // 2}", hashlib.sha1(prefix2 + bytes.fromhex(tmp_dict[f"{i}{n}"]) + bytes.fromhex(hash)).hexdigest())
-        tree.append(parent)
+            parent = (f"{i + 1}", f"{n // 2}", hashlib.sha1(prefix2 + bytes.fromhex(hash) + bytes.fromhex(tmp_dict[f"{i}{n}"])).hexdigest()) ##REVERSE ORDER, AS WE'RE HASHING WITH PREVIOUS
+        tree.append(parent) ##IN CASE WE WERE HASHING WITH THE PREVIOUS, WE GET A DUPLICATE NODE IN THE TREE
         tmp_dict[f"{i+1}{n // 2}"]=parent[2]
         with open(f'nodes/node{i + 1}.{n // 2}', 'w') as f:
             f.write(parent[2])
@@ -108,7 +108,7 @@ def update_tree(new_doc, prefix1, prefix2):
     tree = sorted(tree, key=lambda element: (element[0], element[1]))
 
     with open('tree.txt', 'w') as f:
-        f.write(':'.join(header[:4] + [str(int(header[4]) + 1), str(depth-1), tree[-1][2]]) + '\n')
+        f.write(':'.join(header[:4] + [str(int(header[4]) + 1), str(depth+1), tree[-1][2]]) + '\n')
         for node in tree:
             f.write(':'.join(map(str, node)) + '\n')
 
@@ -120,26 +120,27 @@ def generate_proof(doc, position):
     header = lines[0].strip().split(':')
     depth = int(header[5])
 
-    tree = [tuple(map(str, line.strip().split(':'))) for line in lines[1:]]
+    tree = [tuple(map(str, line.strip().split(':'))) for line in lines[1:]] ##THE MAP AGAIN, WHY?
     tmp_dict = dict((f"{x}{y}", h) for x, y, h in tree)
 
     proof = []
-    i = 0
+    ## I WOULD ADD A CHECK REGARDING THE POSITION, IF IT'S OUT OF BOUNDS OF THE TREE, RETURN []?
+    i = 0 ##SERVES 2 DIFFERENT PURPOSES
     j = position
     #proof.append(f"node{i}.{j}")
     try:
         hash = tmp_dict[f"{i}{j}"]
     except:
         hash = ""
-    proof.append((f"{i}", f"{j}", hash))
+    proof.append((f"{i}", f"{j}", hash)) ##IS THE HASH OF THE REQUESTED NODE SUPPOSED TO BE IN THE PROOF? THE USER (LATER IN THE PROGRAM) CAN COMPUTE IT
 
-    while i < depth and tree[i][0] != 0:
+    while i < depth and tree[i][0] != 0: ##WHAT IS THE MEANING OF tree[i][0] != 0? ISN'T IT ALWAYS 0 AT THE BEGINNING (THE LEVEL OF THE FIRST LEAF)?
         if j % 2 == 0:
             #print(f"node{i} {j+1}")
             #proof.append(f"node{i}.{j+1}")
             try:
                 hash= tmp_dict[f"{i}{j+1}"]
-                proof.append((f"{i}", f"{j + 1}", hash))
+                proof.append((f"{i}", f"{j + 1}", hash)) ##i IS USED AS THE LEVEL (MISMATCH)
             except:
                 hash=""
 
@@ -152,7 +153,7 @@ def generate_proof(doc, position):
             except:
                 hash=""
 
-        i += 2 ** int(tree[i][0])
+        i += 2 ** int(tree[i][0]) ##i IS USED AS THE POINTER TO THE ARRAY (MISMATCH), AND WHAT IS THE MEANING? THE WIDEST LEVEL (NUMBER OF ELEMENTS) IS THE LEVEL 0, THEN THE WIDTH DECREASES
         j //= 2
 
     #print(proof)
@@ -168,7 +169,7 @@ def verify_proof(doc, proof):
     prefix2 = bytes.fromhex(header[3])
     root_hash = header[6]
 
-    current_hash = ""
+    current_hash = "" ##HASH OF doc WITH PREFIX PREPENDED, AS MENTIONED ABOVE
     #print(position)
     for node in proof:
         #print(f"current: {node[2]}")
